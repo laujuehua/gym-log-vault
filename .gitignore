@@ -1,17 +1,20 @@
-# ---- Personal data: stays on Google Drive only, never pushed to GitHub ----
-Sessions/
-Daily/
-Exercises/
-Inbox/
+# Public repo: ignore EVERYTHING by default, then allow only the code.
+# Personal data (Sessions/, Daily/, Exercises/, Inbox/, any other note) stays local.
+/*
+!/.gitignore
+!/README.md
+!/Dashboard.md
+!/Scripts/
+!/Templates/
+!/.obsidian/
 
-# ---- Obsidian local state ----
-.obsidian/workspace*.json
-.obsidian/cache
-.obsidian/plugins/*/main.js
-.obsidian/plugins/*/styles.css
-.trash/
+# Obsidian local state
+/.obsidian/workspace*.json
+/.obsidian/cache
+/.obsidian/plugins/*/main.js
+/.obsidian/plugins/*/styles.css
 
-# ---- Google Drive / OS clutter ----
+# Google Drive / OS clutter
 desktop.ini
 .DS_Store
 *.tmp
