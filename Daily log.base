@@ -1,0 +1,43 @@
+filters:
+  and:
+    - file.inFolder("Daily")
+properties:
+  file.name:
+    displayName: Date
+  bodyweight_kg:
+    displayName: Weight (kg)
+  bedtime:
+    displayName: Bedtime
+  wake_time:
+    displayName: Wake
+  sleep_hours:
+    displayName: Hours slept
+  sleep_quality:
+    displayName: Sleep quality
+  mood:
+    displayName: Mood
+  energy:
+    displayName: Energy
+  note:
+    displayName: Note
+views:
+  - type: table
+    name: Daily log
+    order:
+      - file.name
+      - bodyweight_kg
+      - bedtime
+      - wake_time
+      - sleep_hours
+      - sleep_quality
+      - mood
+      - energy
+      - note
+    sort:
+      - property: file.name
+        direction: DESC
+    summaries:
+      bodyweight_kg: Average
+      sleep_hours: Average
+      sleep_quality: Average
+      mood: Average

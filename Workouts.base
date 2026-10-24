@@ -1,0 +1,23 @@
+filters:
+  and:
+    - file.inFolder("Sessions")
+properties:
+  file.name:
+    displayName: Date
+  workout:
+    displayName: Workout
+  duration_min:
+    displayName: Duration (min)
+  rating:
+    displayName: Rating
+views:
+  - type: table
+    name: Workouts
+    order:
+      - file.name
+      - workout
+      - duration_min
+      - rating
+    sort:
+      - property: file.name
+        direction: DESC

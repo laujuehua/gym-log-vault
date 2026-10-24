@@ -3,8 +3,9 @@
 //   ```dataviewjs
 //   await dv.view("Scripts/gym", { show: "summary" })
 //   ```
-// show: summary | recent | bodyweight | volume | wellbeing | prs | exercise
-// Optional: days (look-back window, default 90), name (exercise name; defaults to the note's title)
+// show: summary | recent | bodyweight | volume | sleep | wellbeing | prs | exercise
+// Optional: days (look-back window, default 90), name (exercise name; defaults to the note's title),
+//           target (sleep target in hours, default 7)
 
 const SESSIONS = '"Sessions"';
 const DAILY = '"Daily"';
@@ -71,6 +72,20 @@ const sessions = dv.pages(SESSIONS).where(p => p.date).sort(p => p.date, "asc").
 
 const daily = dv.pages(DAILY).where(p => p.date).sort(p => p.date, "asc").array();
 
+// sleep: hours from bedtime/wake_time if both set, else sleep_hours; quality from sleep_quality (or old "sleep")
+const hhmm = v => {
+  if (typeof v === "number") return v;                       // YAML 1.1 may read 23:30 as minutes
+  const m = String(v ?? "").match(/^(\d{1,2}):(\d{2})/); return m ? (+m[1]) * 60 + (+m[2]) : null;
+};
+function hoursSlept(p) {
+  const b = hhmm(p.bedtime), w = hhmm(p.wake_time);
+  if (b !== null && w !== null) { let m = w - b; if (m <= 0) m += 1440; return r1(m / 60); }
+  return num(p.sleep_hours);
+}
+const sleepQ = p => num(p.sleep_quality ?? p.sleep);
+const sleepRows = daily.map(d => ({ date: d.date, hours: hoursSlept(d), q: sleepQ(d), bed: hhmm(d.bedtime) }))
+  .filter(s => s.hours !== null || s.q !== null);
+
 // body weight can be logged in a daily check-in or on a session note
 const weights = [...daily, ...sessions.map(s => s.page)]
   .filter(p => num(p.bodyweight_kg) !== null)
@@ -86,12 +101,15 @@ if (show === "summary") {
   const w30 = weights.filter(w => w.date >= today.minus({ days: 30 }))[0];
   const mood7 = daily.filter(d => d.date >= today.minus({ days: 7 }) && num(d.mood) !== null);
   const avgMood = mood7.length ? r1(mood7.reduce((a, d) => a + num(d.mood), 0) / mood7.length) : "–";
+  const sl7 = sleepRows.filter(x => x.date >= today.minus({ days: 7 }) && x.hours !== null);
+  const avgSleep = sl7.length ? `${r1(sl7.reduce((a, x) => a + x.hours, 0) / sl7.length)} h (${sl7.length} nights)` : "–";
   const rows = [
     ["Last session", last ? `${iso(last.date)} · ${last.page.workout ?? ""} (${Math.round(today.diff(last.date, "days").days)} days ago)` : "–"],
     ["Sessions, last 7 days", in7],
     ["Sessions, last 30 days", in30],
     ["Body weight (latest)", lastW ? `${lastW.kg} kg on ${iso(lastW.date)}` : "–"],
     ["Body weight change, 30 days", (lastW && w30) ? `${lastW.kg - w30.kg >= 0 ? "+" : ""}${r1(lastW.kg - w30.kg)} kg` : "–"],
+    ["Average sleep, last 7 days", avgSleep],
     ["Average mood, last 7 days", avgMood],
     ["Sessions logged in total", sessions.length],
   ];
@@ -158,6 +176,47 @@ else if (show === "volume") {
   });
 }
 
+else if (show === "sleep") {
+  const target = input?.target ?? 7;
+  const pts = sleepRows.filter(x => x.date >= since);
+  if (!pts.length) { dv.paragraph("No sleep logged in this period. Add bedtime and wake time in a daily check-in."); }
+  else {
+    const hrs = pts.map(x => x.hours);
+    const avg = hrs.map((_, i) => {
+      const win = hrs.slice(Math.max(0, i - 6), i + 1).filter(h => h !== null);
+      return win.length ? r1(win.reduce((a, h) => a + h, 0) / win.length) : null;
+    });
+    chart({
+      type: "bar",
+      data: {
+        labels: pts.map(x => iso(x.date)),
+        datasets: [
+          { type: "bar", label: "Hours slept", data: hrs, yAxisID: "y",
+            backgroundColor: hrs.map(h => h !== null && h < target ? "rgba(230,126,34,0.75)" : "rgba(52,152,219,0.75)") },
+          { type: "line", label: "7-night average", data: avg, yAxisID: "y", pointRadius: 0, borderWidth: 2, tension: 0.3, spanGaps: true },
+          { type: "line", label: `Target (${target} h)`, data: pts.map(() => target), yAxisID: "y", pointRadius: 0, borderWidth: 1, borderDash: [6, 4] },
+          { type: "line", label: "Quality (1–5)", data: pts.map(x => x.q), yAxisID: "y1", pointRadius: 3, borderWidth: 1, showLine: false },
+        ],
+      },
+      options: {
+        scales: {
+          y: { beginAtZero: true, suggestedMax: 10, title: { display: true, text: "hours" } },
+          y1: { min: 0, max: 5, position: "right", grid: { drawOnChartArea: false }, ticks: { stepSize: 1 }, title: { display: true, text: "quality" } },
+        },
+      },
+    });
+    const withH = pts.filter(x => x.hours !== null);
+    const beds = pts.map(x => x.bed).filter(b => b !== null).map(b => b < 720 ? b + 1440 : b); // after-midnight bedtimes count as late
+    const fmt = m => { m = Math.round(m) % 1440; return `${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}`; };
+    dv.table(["", "Value"], [
+      ["Average sleep", withH.length ? `${r1(withH.reduce((a, x) => a + x.hours, 0) / withH.length)} h` : "–"],
+      [`Nights under ${target} h`, `${withH.filter(x => x.hours < target).length} of ${withH.length}`],
+      ["Shortest / longest", withH.length ? `${Math.min(...withH.map(x => x.hours))} h / ${Math.max(...withH.map(x => x.hours))} h` : "–"],
+      ["Typical bedtime", beds.length ? fmt(beds.reduce((a, b) => a + b, 0) / beds.length) : "–"],
+    ]);
+  }
+}
+
 else if (show === "wellbeing") {
   const pts = daily.filter(d => d.date >= since);
   if (!pts.length) { dv.paragraph("No daily check-ins in this period."); }
@@ -169,7 +228,7 @@ else if (show === "wellbeing") {
         datasets: [
           { label: "Mood", data: pts.map(d => num(d.mood)), tension: 0.3, spanGaps: true },
           { label: "Energy", data: pts.map(d => num(d.energy)), tension: 0.3, spanGaps: true },
-          { label: "Sleep", data: pts.map(d => num(d.sleep)), tension: 0.3, spanGaps: true },
+          { label: "Sleep quality", data: pts.map(d => sleepQ(d)), tension: 0.3, spanGaps: true },
         ],
       },
       options: { scales: { y: { min: 1, max: 5, ticks: { stepSize: 1 } } } },

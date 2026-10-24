@@ -4,6 +4,8 @@
 !/.gitignore
 !/README.md
 !/Dashboard.md
+!/Log.md
+!/*.base
 !/Scripts/
 !/Templates/
 !/.obsidian/
